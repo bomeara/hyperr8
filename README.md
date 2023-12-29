@@ -28,12 +28,12 @@ library(hyperr8)
 car_rates <- generate_car_simulation()
 head(car_rates)
 #>   distance     time     rate       dataset
-#> 1 211.1014 2.578783 81.86087 simulated car
-#> 2 213.5445 3.352930 63.68891 simulated car
-#> 3 209.1898 2.642042 79.17732 simulated car
-#> 4 213.9877 2.962133 72.24110 simulated car
-#> 5 209.4265 3.239187 64.65404 simulated car
-#> 6 204.6919 2.532969 80.81105 simulated car
+#> 1 206.9500 2.368772 87.36596 simulated car
+#> 2 221.3413 3.661825 60.44562 simulated car
+#> 3 208.6496 2.965327 70.36310 simulated car
+#> 4 212.2328 3.012719 70.44559 simulated car
+#> 5 214.2982 3.185374 67.27568 simulated car
+#> 6 209.1510 3.231822 64.71612 simulated car
 ```
 
 This generates a dataset with 1,000 cars with an average speed of 70 mph

@@ -42,17 +42,17 @@ head(car_rates)
 This generates a dataset with 1,000 cars with an average speed of 70 mph and an average driving time of 3 hours, so an average distance traveled of 210 miles. The driving time and distance traveled are highly correlated (0.99). Just looking at the raw distance versus time, we see a strong correlation:
 
 ```{r, echo=FALSE}
-plot(car_rates$time, car_rates$distance, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Distance")
+plot(car_rates$time, car_rates$distance, pch=20, col=rgb(0,0,0,0.2), xlab="Time", ylab="Distance")
 ```
 
 But if we plot the estimated rate versus time, we see a hyperbola:
 
 ```{r, echo=FALSE}
-plot(car_rates$time, car_rates$rate, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate")
+plot(car_rates$time, car_rates$rate, pch=20, col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate")
 ```
 
 And this is even more clear on a log-log plot:
 
 ```{r, echo=FALSE}
-plot(car_rates$time, car_rates$rate, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate", log="xy")
+plot(car_rates$time, car_rates$rate, pch=20, col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate", log="xy")
 ```
