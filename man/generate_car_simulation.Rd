@@ -2,8 +2,7 @@
 % Please edit documentation in R/hyperr8.R
 \name{generate_car_simulation}
 \alias{generate_car_simulation}
-\title{Car simulation
-This will generate a data frame with simulated car data. By default, it will have 1000 rows representing 1000 cars. Each car will have a simulated driving time and a simulated driving speed. The driving time and driving speed will be correlated. The correlation will be 0.99 by default.}
+\title{Car simulation}
 \usage{
 generate_car_simulation(
   mean_driving_time = 3,
@@ -31,12 +30,19 @@ generate_car_simulation(
 A data frame with simulated car data.
 }
 \description{
-Car simulation
-This will generate a data frame with simulated car data. By default, it will have 1000 rows representing 1000 cars. Each car will have a simulated driving time and a simulated driving speed. The driving time and driving speed will be correlated. The correlation will be 0.99 by default.
+This will generate a data frame with simulated car data of speed, distance, and time.
+By default, it will have 1000 rows representing 1000 cars. Each car will have a simulated driving time and a simulated driving speed. The driving time and driving speed will be correlated. The correlation will be 0.99 by default.
 }
 \examples{
 library(hyperr8)
 car_data <- generate_car_simulation()
-plot(car_data$time, car_data$distance)
-plot(car_data$time, car_data$estimated_speed)
+
+# Original data
+plot(car_data$time, car_data$distance, pch=".", col=rgb(0,0,0,0.2))
+
+# Estimated speed
+plot(car_data$time, car_data$rate, pch=".", col=rgb(0,0,0,0.2))
+
+# Log-log estimated speed
+plot(car_data$time, car_data$rate, pch=".", col=rgb(0,0,0,0.2), log="xy")
 }

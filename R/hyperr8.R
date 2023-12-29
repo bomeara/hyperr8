@@ -1,5 +1,7 @@
 #' Car simulation
-#' This will generate a data frame with simulated car data. By default, it will have 1000 rows representing 1000 cars. Each car will have a simulated driving time and a simulated driving speed. The driving time and driving speed will be correlated. The correlation will be 0.99 by default.
+#'
+#' This will generate a data frame with simulated car data of speed, distance, and time. 
+#' By default, it will have 1000 rows representing 1000 cars. Each car will have a simulated driving time and a simulated driving speed. The driving time and driving speed will be correlated. The correlation will be 0.99 by default.
 #' @param mean_driving_time The mean driving time for all cars.
 #' @param mean_driving_speed The mean driving speed for all cars.
 #' @param sd_driving_time The standard deviation of the driving time for the cars.
@@ -11,15 +13,18 @@
 #' @examples
 #' library(hyperr8)
 #' car_data <- generate_car_simulation()
-#' plot(car_data$time, car_data$distance)
-#' plot(car_data$time, car_data$estimated_speed)
+#' 
+#' # Original data
+#' plot(car_data$time, car_data$distance, pch=".", col=rgb(0,0,0,0.2))
+#' 
+#' # Estimated speed
+#' plot(car_data$time, car_data$rate, pch=".", col=rgb(0,0,0,0.2))
+#' 
+#' # Log-log estimated speed
+#' plot(car_data$time, car_data$rate, pch=".", col=rgb(0,0,0,0.2), log="xy")
 #' @export 
 generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, sd_driving_time=0.2, sd_driving_speed=30, cor_driving=0.99, n=1000) {
-	#library(MASS)
-	#library(ggplot2)
-	#library(gganimate)
-	#library(transformr)
-	#library(ggExtra)
+
 
 	mean_driving_distance <- mean_driving_speed*mean_driving_time
 	sd_driving_time <- 0.2
@@ -32,7 +37,8 @@ generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, 
 	sims <- as.data.frame(MASS::mvrnorm(n=n, mu=mu, Sigma=Sigma, empirical=TRUE))
 	generating_speed<- mean_driving_distance/mean_driving_time
 	names(sims) <- c("distance", "time")
-	sims$estimated_speed <- sims$distance/sims$time
+	sims$rate <- sims$distance/sims$time
+	sims$dataset <- "simulated car"
 	return(sims)
 }
 

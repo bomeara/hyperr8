@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of hyperr8 is to ...
+The goal of hyperr8 is to properly handle datasets that have a rate versus a time.
 
 ## Installation
 
@@ -35,21 +35,24 @@ This is a basic example which shows you how to solve a common problem:
 
 ```{r example}
 library(hyperr8)
-## basic example code
+car_rates <- generate_car_simulation()
+head(car_rates)
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+This generates a dataset with 1,000 cars with an average speed of 70 mph and an average driving time of 3 hours, so an average distance traveled of 210 miles. The driving time and distance traveled are highly correlated (0.99). Just looking at the raw distance versus time, we see a strong correlation:
 
-```{r cars}
-summary(cars)
+```{r, include=FALSE}
+plot(car_rates$time, car_rates$distance, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Distance")
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
+But if we plot the estimated rate versus time, we see a hyperbola:
 
-You can also embed plots, for example:
-
-```{r pressure, echo = FALSE}
-plot(pressure)
+```{r, include=FALSE}
+plot(car_rates$time, car_rates$rate, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate")
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+And this is even more clear on a log-log plot:
+
+```{r, include=FALSE}
+plot(car_rates$time, car_rates$rate, pch=".", col=rgb(0,0,0,0.2), xlab="Time", ylab="Rate", log="xy")
+```
