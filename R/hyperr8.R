@@ -32,8 +32,8 @@ hyperr8_run <- function(all_data, nreps=5) {
 #' @return A ggplot2 object.
 #' @export
 plot.hyperr8 <- function(x, loglog=TRUE,...) {
-	x$rate <- exp(x$log_rate)
-	gcool <- ggplot(subset(x, rate_type=='empirical_log1p_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate") 
+	x$rate <- expm1(x$log_rate)
+	gcool <- ggplot(subset(x, rate_type=='empirical_log1p_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
 		gcool <- gcool + scale_x_log10(n.breaks=4) + scale_y_log10(n.breaks=4)
 	}
