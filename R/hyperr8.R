@@ -125,47 +125,6 @@ generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, 
 # 	}
 # }
 
-
-#' Function to find a constant for which log(y+c) is as symmetric as possible at the alpha and 1-alpha percentiles
-#' 
-#' This is done rather than a fixed log1p offset or a fixed tiny offset.
-#' Code is from:
-#' whuber (https://stats.stackexchange.com/users/919/whuber), Choosing c such that log(x + c) would remove skew from the population, URL (version: 2012-11-05): https://stats.stackexchange.com/q/41415
-#' @param y A vector of values
-#' @param alpha The percentile to use for the lower bound
-#' @param beta The percentile to use for extrapoloation
-#' @param gamma The amount to extrapolate below the min
-#' @return A list with the offset and a code
-
-log.start <- function(y, alpha=0.25, beta=1, gamma=0.01) {
-  #
-  # Find a constant `const` for which log(y+c) is as symmetric
-  # as possible at the `alpha` and 1-alpha percentiles.
-  # Returns a list containing the solution and a code:
-  #   Code=0: Constant is good.
-  #   Code=1: Data are already symmetric.
-  #   Code=2: The best solution is not large enough and has been adjusted.
-  #           In this case, the constant is obtained by extrapolating to the
-  #           left from the `beta` percentile beyond the minimum value of `y`;
-  #           the extrapolation is by a (small, positive) amount `gamma`.
-  #
-  stats <- quantile(y, c(alpha, 1/2, 1-alpha))
-  code <- 0
-  if (diff(diff(stats)==0)) {
-    const <- Inf
-    code <- 1
-  }
-  else {
-    const <- (stats[2]^2 - stats[1]*stats[3]) / (stats[1] + stats[3] - 2*stats[2])
-    y.min <- min(y)
-    if (const < -y.min) {
-      const <- gamma * quantile(y, beta) - (1+gamma) * y.min
-      code <- 2
-    }
-  }
-  list(offset=as.numeric(const), code=code)
-}
-
 #former f4
 function_flexible <- function(par, focal_data, log_offset=0) {
 	varepsilon_0 <- par[1]
@@ -259,8 +218,12 @@ clean_input_data <- function(all_data) {
 		all_data$log_offset <- 0
 		for(dataset_name in unique(all_data$citation)) {
 			indices <- which(all_data$citation==dataset_name)
-			log_offset_result <- log.start(all_data$rate[indices])
-			all_data$log_offset[indices] <- log_offset_result$offset	
+			if(any(all_data$rate[indices]<0)) {
+				stop("Negative rates found in input data")
+			}
+			if(any(all_data$time[indices]==0)) {
+				all_data$log_offset[indices] <- 1 # log1p	
+			}
 		}
 	}
 	if(!"rate" %in% colnames(all_data)) {
