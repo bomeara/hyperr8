@@ -189,16 +189,20 @@ generate_all_models <- function() {
 }
 
 optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=Inf, nstarts_extra=10, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), log_offset=0) {
+	model_distance_calls <<- 0
+	model_distance_not_finite <<- 0
 	par=rep(1, nparams)
 	if(any(is.finite(ub))) {
 		par[is.finite(ub)] <- ub[is.finite(ub)]
 	}
 	nfreeparams <- sum(!is.finite(ub))
 	model_distance <- function(par, focal_data, log_offset) {
+		model_distance_calls <<- model_distance_calls + 1
 		predictions <- function_name(par, focal_data, log_offset)
 		difference <- Inf
 		difference <- sum((focal_data$log_rate_with_offset - predictions)^2)
 		if(!is.finite(difference)) {
+			model_distance_not_finite <<- model_distance_not_finite + 1
 			#print(difference)
 			difference <- 1e10
 		}
@@ -237,6 +241,8 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 	dentist_result <- dentist::dent_walk(par=result$solution, fn=model_distance, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, log_offset=log_offset)
 	result$dentist_result <- dentist_result
 	result$nfreeparams <- nfreeparams
+	print(paste0("model_distance_calls: ", model_distance_calls))
+	print(paste0("model_distance_not_finite: ", model_distance_not_finite))
 	return(result)
 }
 
@@ -263,8 +269,6 @@ clean_input_data <- function(all_data) {
 	if(!"time" %in% colnames(all_data)) {
 		stop("Time column not found in input data")
 	}
-	all_data$log_rate <- log1p(all_data$rate)
-	all_data$log1p_rate <- log1p(all_data$rate)
 	if(!"numerator" %in% colnames(all_data)) {
 		all_data$numerator <- all_data$rate*all_data$time
 	}
