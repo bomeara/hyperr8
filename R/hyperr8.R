@@ -32,10 +32,10 @@ hyperr8_run <- function(all_data, nreps=5) {
 #' @return A ggplot2 object.
 #' @export
 plot.hyperr8 <- function(x, loglog=TRUE,...) {
-	x$rate <- expm1(x$log_rate)
+	x$rate <- exp(x$log_rate)
 	gcool <- ggplot(subset(x, rate_type=='empirical_log1p_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
-		gcool <- gcool + scale_x_log10(n.breaks=4) + scale_y_log10(n.breaks=4)
+		gcool <- gcool + scale_x_continuous(trans = "log1p") + scale_y_continuous(trans = "log1p")
 	}
 	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_log1p_rate' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
 	return(gcool)
@@ -67,8 +67,6 @@ plot.hyperr8 <- function(x, loglog=TRUE,...) {
 #' plot(car_data$time, car_data$rate, pch=".", col=rgb(0,0,0,0.2), log="xy")
 #' @export 
 generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, sd_driving_time=0.2, sd_driving_speed=30, cor_driving=0.99, n=1000) {
-
-
 	mean_driving_distance <- mean_driving_speed*mean_driving_time
 	sd_driving_time <- 0.2
 	sd_driving_distance <- 30
@@ -217,8 +215,8 @@ clean_input_data <- function(all_data) {
 	if(!"time" %in% colnames(all_data)) {
 		stop("Time column not found in input data")
 	}
-	all_data$log_rate <- log(all_data$rate)
-	all_data$log1p_rate <- log1p(all_data$rate)	
+	all_data$log_rate <- log1p(all_data$rate)
+	all_data$log1p_rate <- log1p(all_data$rate)
 	if(!"numerator" %in% colnames(all_data)) {
 		all_data$numerator <- all_data$rate*all_data$time
 	}
