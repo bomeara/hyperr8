@@ -5,6 +5,7 @@
 #' Data can be randomized to help suggest whether an observed pattern is spurious. 
 #' @param all_data A data frame with columns of time, rate, and perhaps citation, numerator, denominator, and/or total_time (other columns will be ignored).
 #' @param nreps The number of times to randomize the data within each dataset.
+#' @param epsilon_lower The lower bound for the epsilon parameter.
 #' @return A data.frame of results with class hyperr8.
 #' @export
 #' @examples
@@ -12,15 +13,20 @@
 #' car_data <- generate_car_simulation()
 #' all_run <- hyperr8_run(car_data)
 #' plot(all_run)
-hyperr8_run <- function(all_data, nreps=5) {
+hyperr8_run <- function(all_data, nreps=5, epsilon_lower=0) {
 	all_data <- clean_input_data(all_data)
-	original <- summarize_all_fitted_models(optimization_over_all_data(all_data))
+	original <- summarize_all_fitted_models(optimization_over_all_data(all_data, epsilon_lower=epsilon_lower))
 	original$rep <- "Original"
-	randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps)
+	randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower)
 	randomized$rep <- paste0("Rep ", randomized$rep)
 	merged <- dplyr::bind_rows(original, randomized)
 	class(merged) <- c("hyperr8", class(merged))
+	#merged <- as.data.frame(merged) # I am a Klingon with bad spelling. Death to tibbles. They have no honor.
 	return(merged)
+}
+
+get_best_empirical <- function(run_output) {
+	return(subset(run_output, rep=="Original" & deltaAIC==0))
 }
 
 #' Plotting function for hyperr8
@@ -32,12 +38,13 @@ hyperr8_run <- function(all_data, nreps=5) {
 #' @return A ggplot2 object.
 #' @export
 plot.hyperr8 <- function(x, loglog=TRUE,...) {
-	x$rate <- exp(x$log_rate)
-	gcool <- ggplot(subset(x, rate_type=='empirical_log_rate_with_offset' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
+	npoints <- nrow(subset(x, rate_type=='empirical_rate' & deltaAIC==0))
+	alpha <- min(0.2, 10/sqrt(npoints))
+	gcool <- ggplot(subset(x, rate_type=='empirical_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=alpha) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
 		gcool <- gcool + scale_x_continuous(trans = "log") + scale_y_continuous(trans = "log")
 	}
-	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_log_rate_with_offset' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
+	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_rate' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
 	return(gcool)
 }
 
@@ -192,7 +199,7 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 		difference <- Inf
 		difference <- sum((focal_data$log_rate_with_offset - predictions)^2)
 		if(!is.finite(difference)) {
-			print(difference)
+			#print(difference)
 			difference <- 1e10
 		}
 		neglnL <- 0.5*nrow(focal_data)*log(difference/nrow(focal_data)) #yes, see lnL at https://en.wikipedia.org/wiki/Akaike_information_criterion#Comparison_with_least_squares, which is -0.5*n*log(RSS/n), so we get rid of the negative sign
@@ -240,7 +247,15 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 #' @return A data frame with columns of time, rate, citation, numerator, denominator, and other columns in the input.
 clean_input_data <- function(all_data) {
 	if(!"citation" %in% colnames(all_data)) {
-		all_data$citation <- "unknown"
+		all_data$citation <- "uncited"
+	}
+	if(!"log_offset" %in% colnames(all_data)) {
+		all_data$log_offset <- 0
+		for(dataset_name in unique(all_data$citation)) {
+			indices <- which(all_data$citation==dataset_name)
+			log_offset_result <- log.start(all_data$rate[indices])
+			all_data$log_offset[indices] <- log_offset_result$offset	
+		}
 	}
 	if(!"rate" %in% colnames(all_data)) {
 		stop("Rate column not found in input data")
@@ -269,36 +284,37 @@ clean_input_data <- function(all_data) {
 #' By default it will use all models, but you can specify a subset of models to use.
 #' @param all_data A data frame with columns of time, rate, and citation.
 #' @param models A data frame with columns of e, k, a, and description
+#' @param epsilon_lower The lower bound for the epsilon parameter.
 #' @return A list of results, one for each model and dataset.
 #' @export
-optimization_over_all_data <- function(all_data, models=generate_all_models()) {
+optimization_over_all_data <- function(all_data, models=generate_all_models(), epsilon_lower=0) {
 	all_data <- clean_input_data(all_data)
 	datasets <- unique(all_data$citation)
 	results <- list()
 	for(dataset in datasets) {
 		focal_data <- subset(all_data, citation==dataset)
-		log_offset <- 0
-		if(any(focal_data$rate==0)) {
-			log.start_result <- log.start(focal_data$rate)
-			log_offset <- log.start_result$offset
-		}
+		log_offset <- focal_data$log_offset[1]
 		focal_data$log_rate_with_offset <- log(focal_data$rate + log_offset)
 		
 		for(model_index in sequence(nrow(models))) {
-			lb <- rep(-Inf, 3)
+			lb <- c(epsilon_lower, rep(-Inf, 2))
 			ub <- rep(Inf, 3)
 			if(models$e[model_index]!="e") {
-				lb[1] <- models$e[model_index]
-				ub[1] <- models$e[model_index]
+				lb[1] <- as.numeric(as.character(models$e[model_index]))
+				ub[1] <- as.numeric(as.character(models$e[model_index]))
 			}
 			if(models$k[model_index]!="k") {
-				lb[2] <- models$k[model_index]
-				ub[2] <- models$k[model_index]
+				lb[2] <- as.numeric(as.character(models$k[model_index]))
+				ub[2] <- as.numeric(as.character(models$k[model_index]))
 			}
 			if(models$a[model_index]!="a") {
-				lb[3] <- models$a[model_index]
-				ub[3] <- models$a[model_index]
+				lb[3] <- as.numeric(as.character(models$a[model_index]))
+				ub[3] <- as.numeric(as.character(models$a[model_index]))
 			}
+			print(paste0("Optimizing model ", model_index, " of ", nrow(models), " ", models$description[model_index],  " for dataset ", dataset))
+			print(paste0("lb: ", paste0(lb, collapse=", ")))
+			print(paste0("ub: ", paste0(ub, collapse=", ")))
+			
 			local_result <- optimize_rate_model(focal_data, function_flexible, nparams=3, lb=lb, ub=ub, log_offset=log_offset)
 			local_result$model <- models$description[model_index]
 			local_result <- summarize_model(local_result, focal_data, function_flexible, log_offset=log_offset)
@@ -323,11 +339,14 @@ summarize_model <- function(local_result, focal_data, function_name, log_offset)
 	solution_nomserr <- solution
 	solution_nomserr[1] <- 0
 	local_result$predicted_log_rate_with_offset <- function_name(local_result$solution, focal_data, log_offset=log_offset)
+	local_result$predicted_rate <- exp(local_result$predicted_log_rate_with_offset) - log_offset
 	local_result$empirical_log_rate <- focal_data$log_rate
 	local_result$empirical_log_rate_with_offset <- log(focal_data$rate + log_offset)
-	local_result$empirical_nonlog_rate <- focal_data$rate
+	local_result$empirical_rate <- focal_data$rate
 	local_result$predicted_log_rate_with_offset_no_mserr <- rep(NA, length(local_result$empirical_log_rate))
 	try({ local_result$predicted_log_rate_with_offset_no_mserr <- function_name(solution_nomserr, focal_data, log_offset=log_offset)})
+	local_result$predicted_rate_no_mserr <- NA
+	try({ local_result$predicted_rate_no_mserr <- exp(local_result$predicted_log_rate_with_offset_no_mserr) - log_offset})
 	local_result$error_only_log_rate_with_offset <- local_result$predicted_log_rate_with_offset - local_result$predicted_log_rate_with_offset_no_mserr
 	parameters_no_epsilon <- local_result$par
 	#parameters_no_epsilon[1] <- 0
@@ -355,8 +374,36 @@ summarize_all_fitted_models <- function(minimization_approach_result) {
 			focal_result$dentist_result$all_ranges <- cbind(focal_result$dentist_result$all_ranges, rep(NA, nrow(focal_result$dentist_result$all_ranges)))
 			focal_result$dentist_result$all_ranges <- cbind(focal_result$dentist_result$all_ranges, rep(NA, nrow(focal_result$dentist_result$all_ranges)))
 		}
-		focal_df <- suppressWarnings(data.frame(dataset=data_name, model=focal_result$model, n=focal_result$n, AIC=focal_result$AIC, objective=focal_result$objective, nparams=length(focal_result$par), param_e=params['e'], param_k=params['k'], param_a=params['a'], param_e_lower = focal_result$dentist_result$all_ranges['lower.CI', 1], param_e_upper =  focal_result$dentist_result$all_ranges['upper.CI', 1], param_k_lower = focal_result$dentist_result$all_ranges['lower.CI', 2], param_k_upper =  focal_result$dentist_result$all_ranges['upper.CI', 2], param_a_lower = focal_result$dentist_result$all_ranges['lower.CI', 3], param_a_upper =  focal_result$dentist_result$all_ranges['upper.CI', 3], predicted_log_rate=focal_result$predicted_log_rate, empirical_log_rate=focal_result$empirical_log_rate, predicted_log_rate_no_mserr=focal_result$predicted_log_rate_no_mserr, error_only_log_rate=focal_result$error_only_log_rate, time=focal_result$time, numerator=focal_result$numerator, total_time=focal_result$total_time, denominator=focal_result$denominator))
-		focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate", "empirical_log_rate", "predicted_log_rate_no_mserr", "error_only_log_rate"), names_to="rate_type", values_to="log_rate")
+		focal_df <- suppressWarnings(data.frame(
+			dataset=data_name, 
+			model=focal_result$model, 
+			n=focal_result$n, 
+			AIC=focal_result$AIC, 
+			objective=focal_result$objective, 
+			nfreeparams=focal_result$nfreeparams, 
+			param_e=params['e'], 
+			param_k=params['k'], 
+			param_a=params['a'], 
+			param_e_lower = focal_result$dentist_result$all_ranges['lower.CI', 1], 
+			param_e_upper =  focal_result$dentist_result$all_ranges['upper.CI', 1], 
+			param_k_lower = focal_result$dentist_result$all_ranges['lower.CI', 2], 
+			param_k_upper =  focal_result$dentist_result$all_ranges['upper.CI', 2], 
+			param_a_lower = focal_result$dentist_result$all_ranges['lower.CI', 3], 
+			param_a_upper =  focal_result$dentist_result$all_ranges['upper.CI', 3], predicted_log_rate_with_offset=focal_result$predicted_log_rate_with_offset, 
+			empirical_log_rate=focal_result$empirical_log_rate, 
+			empirical_log_rate_with_offset=focal_result$empirical_log_rate_with_offset,
+			predicted_log_rate_with_offset_no_mserr=focal_result$predicted_log_rate_with_offset_no_mserr, 
+			error_only_log_rate_with_offset=focal_result$error_only_log_rate_with_offset, 
+			predicted_rate=focal_result$predicted_rate,
+			empirical_rate=focal_result$empirical_rate,
+			predicted_rate_no_mserr=focal_result$predicted_rate_no_mserr,
+			time=focal_result$time, 
+			numerator=focal_result$numerator, 
+			total_time=focal_result$total_time, 
+			denominator=focal_result$denominator
+		))
+		focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
+
 		#focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("predicted_nonlog_rate", "empirical_nonlog_rate", "predicted_nonlog_rate_no_mserr", "error_only_nonlog_rate"), names_to="rate_type", values_to="nonlog_rate")
 		results <- rbind(results, focal_df_tall)
 	}
@@ -375,10 +422,10 @@ summarize_all_models <- function(minimization_approach_result_summarized) {
 }
 
 
-optimization_and_summarization_over_randomized_data <- function(all_data, nreps=5) {
+optimization_and_summarization_over_randomized_data <- function(all_data, nreps=5, epsilon_lower=0) {
 	final_result <- data.frame()
 	for(rep_index in sequence(nreps)) {
-		local_result <- summarize_all_fitted_models(optimization_over_all_data(randomize_within_dataset(all_data)))
+		local_result <- summarize_all_fitted_models(optimization_over_all_data(randomize_within_dataset(all_data), epsilon_lower=epsilon_lower))
 		local_result$rep <- rep_index
 		final_result <- rbind(final_result, local_result)	
 	}
