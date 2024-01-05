@@ -33,11 +33,11 @@ hyperr8_run <- function(all_data, nreps=5) {
 #' @export
 plot.hyperr8 <- function(x, loglog=TRUE,...) {
 	x$rate <- exp(x$log_rate)
-	gcool <- ggplot(subset(x, rate_type=='empirical_log1p_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
+	gcool <- ggplot(subset(x, rate_type=='empirical_log_rate_with_offset' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=0.2) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
-		gcool <- gcool + scale_x_continuous(trans = "log1p") + scale_y_continuous(trans = "log1p")
+		gcool <- gcool + scale_x_continuous(trans = "log") + scale_y_continuous(trans = "log")
 	}
-	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_log1p_rate' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
+	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_log_rate_with_offset' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
 	return(gcool)
 }
 
@@ -118,16 +118,53 @@ generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, 
 # 	}
 # }
 
+
+#' Function to find a constant for which log(y+c) is as symmetric as possible at the alpha and 1-alpha percentiles
+#' 
+#' This is done rather than a fixed log1p offset or a fixed tiny offset.
+#' Code is from:
+#' whuber (https://stats.stackexchange.com/users/919/whuber), Choosing c such that log(x + c) would remove skew from the population, URL (version: 2012-11-05): https://stats.stackexchange.com/q/41415
+#' @param y A vector of values
+#' @param alpha The percentile to use for the lower bound
+#' @param beta The percentile to use for extrapoloation
+#' @param gamma The amount to extrapolate below the min
+#' @return A list with the offset and a code
+
+log.start <- function(y, alpha=0.25, beta=1, gamma=0.01) {
+  #
+  # Find a constant `const` for which log(y+c) is as symmetric
+  # as possible at the `alpha` and 1-alpha percentiles.
+  # Returns a list containing the solution and a code:
+  #   Code=0: Constant is good.
+  #   Code=1: Data are already symmetric.
+  #   Code=2: The best solution is not large enough and has been adjusted.
+  #           In this case, the constant is obtained by extrapolating to the
+  #           left from the `beta` percentile beyond the minimum value of `y`;
+  #           the extrapolation is by a (small, positive) amount `gamma`.
+  #
+  stats <- quantile(y, c(alpha, 1/2, 1-alpha))
+  code <- 0
+  if (diff(diff(stats)==0)) {
+    const <- Inf
+    code <- 1
+  }
+  else {
+    const <- (stats[2]^2 - stats[1]*stats[3]) / (stats[1] + stats[3] - 2*stats[2])
+    y.min <- min(y)
+    if (const < -y.min) {
+      const <- gamma * quantile(y, beta) - (1+gamma) * y.min
+      code <- 2
+    }
+  }
+  list(offset=as.numeric(const), code=code)
+}
+
 #former f4
-function_flexible <- function(par, focal_data, do_log1p=TRUE) {
+function_flexible <- function(par, focal_data, log_offset=0) {
 	varepsilon_0 <- par[1]
 	k <- par[2]
 	a <- par[3]
-	if(do_log1p) {
-		return(log1p(varepsilon_0 + k*(focal_data$time)^a) - log1p(focal_data$time))
-	} else {
-		return((varepsilon_0 + k*(focal_data$time)^a)/focal_data$time)
-	}
+	return(log(log_offset + varepsilon_0 + k*(focal_data$time)^a) - log(log_offset + focal_data$time))
 }
 
 generate_all_models <- function() {
@@ -249,6 +286,12 @@ optimization_over_all_data <- function(all_data, do_log1p=TRUE, models=generate_
 	results <- list()
 	for(dataset in datasets) {
 		focal_data <- subset(all_data, citation==dataset)
+		log_offset <- 0
+		if(any(focal_data$rate==0)) {
+			log.start_result <- log.start(focal_data$rate)
+			log_offset <- log.start_result$offset
+				
+		}
 		
 		for(model_index in sequence(nrow(models))) {
 			lb <- rep(-Inf, 3)
@@ -265,9 +308,9 @@ optimization_over_all_data <- function(all_data, do_log1p=TRUE, models=generate_
 				lb[3] <- models$a[model_index]
 				ub[3] <- models$a[model_index]
 			}
-			local_result <- optimize_rate_model(focal_data, function_flexible, nparams=3, lb=lb, ub=ub, do_log1p=do_log1p)
+			local_result <- optimize_rate_model(focal_data, function_flexible, nparams=3, lb=lb, ub=ub, log_offset=log_offset)
 			local_result$model <- models$description[model_index]
-			local_result <- summarize_model(local_result, focal_data, function_flexible)
+			local_result <- summarize_model(local_result, focal_data, function_flexible, log_offset=log_offset)
 			results[[length(results)+1]] <- local_result
 			names(results)[length(results)] <- paste0(dataset, "__", local_result$model)	
 
@@ -277,77 +320,8 @@ optimization_over_all_data <- function(all_data, do_log1p=TRUE, models=generate_
 }
 
 
-#' Optimize rate model
-#' 
-#' This will dredge all the rate models for a given dataset. It expects column names of time, rate, and citation; optionally, it can also include a numerator, denominator, and/or total_time columns. It will return a list of results, one for each model and dataset.
-#' @param all_data A data frame with columns of time, rate, and citation.
-#' @param do_log1p Whether to do analyses on the log scale.
-#' @return A list of results, one for each model and dataset.
-#' @export
-optimization_over_all_data_OLD <- function(all_data, do_log1p=TRUE) {
-	all_data <- clean_input_data(all_data)
-	if(any(all_data$rate<=0)) {
-		do_log1p <- FALSE
-		warning("Some rates are <= 0; setting do_log1p=FALSE")
-	}
-	datasets <- unique(all_data$citation)
-	results <- list()
-	for(dataset in datasets) {
-		focal_data <- subset(all_data, citation==dataset)
-		lb <- -Inf
-		ub <- Inf
-		names(lb) <- c("e")
-		names(ub) <- c("e")
-		local_result <- optimize_rate_model(focal_data, function_constant, nparams=1, lb=lb, ub=ub, do_log1p=do_log1p)
-		local_result$model <- "function_constant"
-		local_result <- summarize_model(local_result, focal_data, function_constant)
-		results[[length(results)+1]] <- local_result
-		names(results)[length(results)] <- paste0(dataset, "_", local_result$model)
 
-		#f2-f4
-		
-		param_names <- c("e", "k", "a")
-		for(select_count in sequence(length(param_names))) {
-			combinations <- combn(param_names, select_count)
-			for (selected_index in sequence(ncol(combinations))) {
-				selected_params <- combinations[,selected_index]
-				lb=c(0, rep(-Inf, length(param_names)-1))
-				ub=rep(Inf, length(param_names))
-				names(lb) <- param_names
-				names(ub) <- param_names
-				tiny <- 0
-				lb[!(param_names %in% selected_params)] <- 1-tiny
-				ub[!(param_names %in% selected_params)] <- 1+tiny
-				if(!("e" %in% selected_params)) { #since if e is not there, it should have a value of 0
-					lb[1] <- 0-tiny
-					ub[1] <- 0+tiny
-				}
-				if(!("a" %in% selected_params)) {
-					local_result <- optimize_rate_model(focal_data, function_hyperbola, nparams=2, lb=lb, ub=ub, do_log1p=do_log1p)
-					local_result$model <- paste0("function_hyperbola_", paste0(selected_params, collapse=""))
-					local_result <- summarize_model(local_result, focal_data, function_hyperbola)
-					results[[length(results)+1]] <- local_result
-					names(results)[length(results)] <- paste0(dataset, "_", local_result$model)
-					
-					local_result <- optimize_rate_model(focal_data, function_linear, nparams=2, lb=lb, ub=ub, do_log1p=do_log1p)
-					local_result$model <- paste0("function_linear_", paste0(selected_params, collapse=""))
-					local_result <- summarize_model(local_result, focal_data, function_linear)
-					results[[length(results)+1]] <- local_result
-					names(results)[length(results)] <- paste0(dataset, "_", local_result$model)
-				} else {
-					local_result <- optimize_rate_model(focal_data, function_flexible, nparams=3, lb=lb, ub=ub, do_log1p=do_log1p)
-					local_result$model <- paste0("function_flexible_", paste0(selected_params, collapse=""))
-					local_result <- summarize_model(local_result, focal_data, function_flexible)
-					results[[length(results)+1]] <- local_result
-					names(results)[length(results)] <- paste0(dataset, "_", local_result$model)	
-				}	
-			}	
-		}
-	}	
-	return(results)
-}
-
-summarize_model <- function(local_result, focal_data, function_name) {
+summarize_model <- function(local_result, focal_data, function_name, log_offset) {
 	local_result$n <- nrow(focal_data)
 	local_result$AIC <- nrow(focal_data)*local_result$objective + 2*local_result$nfreeparams
 	local_result$numerator <- focal_data$numerator
@@ -357,20 +331,16 @@ summarize_model <- function(local_result, focal_data, function_name) {
 	solution <- local_result$solution
 	solution_nomserr <- solution
 	solution_nomserr[1] <- 0
-	local_result$predicted_log1p_rate <- function_name(local_result$solution, focal_data, do_log1p=TRUE)
-	local_result$predicted_nonlog_rate <- function_name(local_result$solution, focal_data, do_log1p=FALSE)
-	local_result$empirical_log1p_rate <- focal_data$log1p_rate
-	local_result$empirical_log1p_rate <- focal_data$log_rate
-	local_result$empirical_nonlog_rate <- expm1(focal_data$log1p_rate)
-	local_result$predicted_log1p_rate_no_mserr <- rep(NA, length(local_result$empirical_log1p_rate))
-	local_result$predicted_nonlog_rate_no_mserr <- rep(NA, length(local_result$empirical_log1p_rate))
-	try({ local_result$predicted_log1p_rate_no_mserr <- function_name(solution_nomserr, focal_data)})
-	try({ local_result$predicted_nonlog_rate_no_mserr <- function_name(solution_nomserr, focal_data, do_log1p=FALSE)})
-	local_result$error_only_log1p_rate <- local_result$predicted_log1p_rate - local_result$predicted_log1p_rate_no_mser
-	local_result$error_only_nonlog_rate <- local_result$predicted_nonlog_rate - local_result$predicted_nonlog_rate_no_mser
+	local_result$predicted_log_rate_with_offset <- function_name(local_result$solution, focal_data, log_offset=log_offset)
+	local_result$empirical_log_rate <- focal_data$log_rate
+	local_result$empirical_log_rate_with_offset <- log(focal_data$rate + log_offset)
+	local_result$empirical_nonlog_rate <- focal_data$rate
+	local_result$predicted_log_rate_with_offset_no_mserr <- rep(NA, length(local_result$empirical_log_rate))
+	try({ local_result$predicted_log_rate_with_offset_no_mserr <- function_name(solution_nomserr, focal_data, log_offset=log_offset)})
+	local_result$error_only_log_rate_with_offset <- local_result$predicted_log_rate_with_offset - local_result$predicted_log_rate_with_offset_no_mserr
 	parameters_no_epsilon <- local_result$par
 	#parameters_no_epsilon[1] <- 0
-	#local_result$predicted_log1p_rate_no_mserr <- function_name(parameters_no_epsilon, df)
+	#local_result$predicted_log_rate_no_mserr <- function_name(parameters_no_epsilon, df)
 	return(local_result)
 }
 
@@ -394,8 +364,8 @@ summarize_all_fitted_models <- function(minimization_approach_result) {
 			focal_result$dentist_result$all_ranges <- cbind(focal_result$dentist_result$all_ranges, rep(NA, nrow(focal_result$dentist_result$all_ranges)))
 			focal_result$dentist_result$all_ranges <- cbind(focal_result$dentist_result$all_ranges, rep(NA, nrow(focal_result$dentist_result$all_ranges)))
 		}
-		focal_df <- suppressWarnings(data.frame(dataset=data_name, model=focal_result$model, n=focal_result$n, AIC=focal_result$AIC, objective=focal_result$objective, nparams=length(focal_result$par), param_e=params['e'], param_k=params['k'], param_a=params['a'], param_e_lower = focal_result$dentist_result$all_ranges['lower.CI', 1], param_e_upper =  focal_result$dentist_result$all_ranges['upper.CI', 1], param_k_lower = focal_result$dentist_result$all_ranges['lower.CI', 2], param_k_upper =  focal_result$dentist_result$all_ranges['upper.CI', 2], param_a_lower = focal_result$dentist_result$all_ranges['lower.CI', 3], param_a_upper =  focal_result$dentist_result$all_ranges['upper.CI', 3], predicted_log1p_rate=focal_result$predicted_log1p_rate, empirical_log1p_rate=focal_result$empirical_log1p_rate, predicted_log1p_rate_no_mserr=focal_result$predicted_log1p_rate_no_mserr, error_only_log1p_rate=focal_result$error_only_log1p_rate, time=focal_result$time, numerator=focal_result$numerator, total_time=focal_result$total_time, denominator=focal_result$denominator))
-		focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log1p_rate", "empirical_log1p_rate", "predicted_log1p_rate_no_mserr", "error_only_log1p_rate"), names_to="rate_type", values_to="log_rate")
+		focal_df <- suppressWarnings(data.frame(dataset=data_name, model=focal_result$model, n=focal_result$n, AIC=focal_result$AIC, objective=focal_result$objective, nparams=length(focal_result$par), param_e=params['e'], param_k=params['k'], param_a=params['a'], param_e_lower = focal_result$dentist_result$all_ranges['lower.CI', 1], param_e_upper =  focal_result$dentist_result$all_ranges['upper.CI', 1], param_k_lower = focal_result$dentist_result$all_ranges['lower.CI', 2], param_k_upper =  focal_result$dentist_result$all_ranges['upper.CI', 2], param_a_lower = focal_result$dentist_result$all_ranges['lower.CI', 3], param_a_upper =  focal_result$dentist_result$all_ranges['upper.CI', 3], predicted_log_rate=focal_result$predicted_log_rate, empirical_log_rate=focal_result$empirical_log_rate, predicted_log_rate_no_mserr=focal_result$predicted_log_rate_no_mserr, error_only_log_rate=focal_result$error_only_log_rate, time=focal_result$time, numerator=focal_result$numerator, total_time=focal_result$total_time, denominator=focal_result$denominator))
+		focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate", "empirical_log_rate", "predicted_log_rate_no_mserr", "error_only_log_rate"), names_to="rate_type", values_to="log_rate")
 		#focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("predicted_nonlog_rate", "empirical_nonlog_rate", "predicted_nonlog_rate_no_mserr", "error_only_nonlog_rate"), names_to="rate_type", values_to="nonlog_rate")
 		results <- rbind(results, focal_df_tall)
 	}
