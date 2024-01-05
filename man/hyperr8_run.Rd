@@ -4,12 +4,14 @@
 \alias{hyperr8_run}
 \title{Run all analyses}
 \usage{
-hyperr8_run(all_data, nreps = 5)
+hyperr8_run(all_data, nreps = 5, epsilon_lower = 0)
 }
 \arguments{
 \item{all_data}{A data frame with columns of time, rate, and perhaps citation, numerator, denominator, and/or total_time (other columns will be ignored).}
 
 \item{nreps}{The number of times to randomize the data within each dataset.}
+
+\item{epsilon_lower}{The lower bound for the epsilon parameter.}
 }
 \value{
 A data.frame of results with class hyperr8.

@@ -4,12 +4,18 @@
 \alias{optimization_over_all_data}
 \title{Optimize rate model}
 \usage{
-optimization_over_all_data(all_data, models = generate_all_models())
+optimization_over_all_data(
+  all_data,
+  models = generate_all_models(),
+  epsilon_lower = 0
+)
 }
 \arguments{
 \item{all_data}{A data frame with columns of time, rate, and citation.}
 
 \item{models}{A data frame with columns of e, k, a, and description}
+
+\item{epsilon_lower}{The lower bound for the epsilon parameter.}
 }
 \value{
 A list of results, one for each model and dataset.
