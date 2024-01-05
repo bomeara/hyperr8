@@ -181,20 +181,16 @@ generate_all_models <- function() {
 	return(param_possibilities)
 }
 
-optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=Inf, nstarts_extra=10, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), do_log1p=TRUE) {
+optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=Inf, nstarts_extra=10, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), log_offset=0) {
 	par=rep(1, nparams)
 	if(any(is.finite(ub))) {
 		par[is.finite(ub)] <- ub[is.finite(ub)]
 	}
 	nfreeparams <- sum(!is.finite(ub))
-	model_distance <- function(par, focal_data, do_log1p) {
-		predictions <- function_name(par, focal_data, do_log1p)
+	model_distance <- function(par, focal_data, log_offset) {
+		predictions <- function_name(par, focal_data, log_offset)
 		difference <- Inf
-		if(do_log1p) {
-			difference <- sum((focal_data$log1p_rate - predictions)^2)
-		} else {
-			difference <- sum((focal_data$rate - predictions)^2)
-		}
+		difference <- sum((focal_data$log_rate_with_offset - predictions)^2)
 		if(!is.finite(difference)) {
 			print(difference)
 			difference <- 1e10
@@ -203,7 +199,7 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 		return(neglnL)
 	}
 	#return(optim(par=par, fn=model_distance, df=df, lower=lb, upper=ub, method="L-BFGS-B"))
-	result <- nloptr::nloptr(x0=par, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data, do_log1p=do_log1p)
+	result <- nloptr::nloptr(x0=par, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data, log_offset=log_offset)
 	
 	# starting with lower param values, since they're often small
 	par2 <- c(0.1, 0.0001, 1)[1:nparams]
@@ -211,7 +207,7 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 		par2[is.finite(ub)] <- ub[is.finite(ub)]
 	}
 	
-	result2 <- nloptr::nloptr(x0=par2, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data, do_log1p=do_log1p)
+	result2 <- nloptr::nloptr(x0=par2, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data, log_offset=log_offset)
 	
 	if(result2$objective < result$objective) {
 		result <- result2
@@ -224,14 +220,14 @@ optimize_rate_model<- function(focal_data, function_name, nparams, lb=-Inf, ub=I
 		par3 <- rnorm(length(result$solution), mean=result$solution, sd=sd_vector)
 		par3[par3<lb] <- lb[par3<lb]
 		par3[par3>ub] <- ub[par3>ub]
-		result3 <- nloptr::nloptr(x0=par3, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm=all_algorithms[1 + start_index%%length(all_algorithms)], xtol_rel = 1e-4), focal_data=focal_data, do_log1p=do_log1p)
+		result3 <- nloptr::nloptr(x0=par3, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm=all_algorithms[1 + start_index%%length(all_algorithms)], xtol_rel = 1e-4), focal_data=focal_data, log_offset=log_offset)
 		if(result3$objective < result$objective) {
 			result <- result3
 		}	
 	}
 	
 	names(result$solution) <- c("e", "k", "a")[1:length(result$solution)]
-	dentist_result <- dentist::dent_walk(par=result$solution, fn=model_distance, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, do_log1p=do_log1p)
+	dentist_result <- dentist::dent_walk(par=result$solution, fn=model_distance, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, log_offset=log_offset)
 	result$dentist_result <- dentist_result
 	result$nfreeparams <- nfreeparams
 	return(result)
@@ -272,16 +268,11 @@ clean_input_data <- function(all_data) {
 #' 
 #' By default it will use all models, but you can specify a subset of models to use.
 #' @param all_data A data frame with columns of time, rate, and citation.
-#' @param do_log1p Whether to do analyses on the log scale.
 #' @param models A data frame with columns of e, k, a, and description
 #' @return A list of results, one for each model and dataset.
 #' @export
-optimization_over_all_data <- function(all_data, do_log1p=TRUE, models=generate_all_models()) {
+optimization_over_all_data <- function(all_data, models=generate_all_models()) {
 	all_data <- clean_input_data(all_data)
-	# if(any(all_data$rate<=0)) {
-	# 	do_log1p <- FALSE
-	# 	warning("Some rates are <= 0; setting do_log1p=FALSE")
-	# }
 	datasets <- unique(all_data$citation)
 	results <- list()
 	for(dataset in datasets) {
@@ -290,8 +281,8 @@ optimization_over_all_data <- function(all_data, do_log1p=TRUE, models=generate_
 		if(any(focal_data$rate==0)) {
 			log.start_result <- log.start(focal_data$rate)
 			log_offset <- log.start_result$offset
-				
 		}
+		focal_data$log_rate_with_offset <- log(focal_data$rate + log_offset)
 		
 		for(model_index in sequence(nrow(models))) {
 			lb <- rep(-Inf, 3)

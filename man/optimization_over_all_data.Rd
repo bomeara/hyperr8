@@ -4,16 +4,10 @@
 \alias{optimization_over_all_data}
 \title{Optimize rate model}
 \usage{
-optimization_over_all_data(
-  all_data,
-  do_log1p = TRUE,
-  models = generate_all_models()
-)
+optimization_over_all_data(all_data, models = generate_all_models())
 }
 \arguments{
 \item{all_data}{A data frame with columns of time, rate, and citation.}
-
-\item{do_log1p}{Whether to do analyses on the log scale.}
 
 \item{models}{A data frame with columns of e, k, a, and description}
 }
