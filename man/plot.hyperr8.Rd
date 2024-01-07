@@ -4,12 +4,14 @@
 \alias{plot.hyperr8}
 \title{Plotting function for hyperr8}
 \usage{
-\method{plot}{hyperr8}(x, loglog = TRUE, ...)
+\method{plot}{hyperr8}(x, loglog = TRUE, include_errorless_prediction = FALSE, ...)
 }
 \arguments{
 \item{x}{The output from hyperr8_run.}
 
 \item{loglog}{Whether to use a log-log plot}
+
+\item{include_errorless_prediction}{Whether to include the errorless prediction line}
 
 \item{...}{Other arguments to pass to the plotting function.}
 }

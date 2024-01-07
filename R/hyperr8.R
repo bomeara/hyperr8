@@ -34,17 +34,21 @@ get_best_empirical <- function(run_output) {
 #' This will plot the results from hyperr8_run.
 #' @param x The output from hyperr8_run.
 #' @param loglog Whether to use a log-log plot
+#' @param include_errorless_prediction Whether to include the errorless prediction line
 #' @param ... Other arguments to pass to the plotting function.
 #' @return A ggplot2 object.
 #' @export
-plot.hyperr8 <- function(x, loglog=TRUE,...) {
+plot.hyperr8 <- function(x, loglog=TRUE, include_errorless_prediction=FALSE, ...) {
 	npoints <- nrow(subset(x, rate_type=='empirical_rate' & deltaAIC==0))
 	alpha <- min(0.2, 10/sqrt(npoints))
-	gcool <- ggplot(subset(x, rate_type=='empirical_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=alpha) + facet_grid(dataset~rep) + theme_bw() + xlab("Time") + ylab("Rate")
+	gcool <- ggplot(subset(x, rate_type=='empirical_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=alpha) + facet_grid(dataset~rep, scales="free_y") + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
 		gcool <- gcool + scale_x_continuous(trans = "log") + scale_y_continuous(trans = "log")
 	}
 	gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_rate' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour=model))
+	if(include_errorless_prediction) {
+		gcool <- gcool + geom_line(data=subset(x, rate_type=='predicted_rate_no_mserr' & deltaAIC==0), aes(x=time, y=rate, group=rep, colour="black"), linetype="dashed")
+	}
 	return(gcool)
 }
 
