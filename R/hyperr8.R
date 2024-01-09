@@ -49,6 +49,12 @@ plot.hyperr8 <- function(x, loglog=TRUE, ...) {
 	return(gcool)
 }
 
+#' Summarize hyperr8 results
+#' 
+#' This will summarize the results from hyperr8_run.
+#' @param x The output from hyperr8_run.
+#' @return A list with summary information.
+#' @export
 summary.hyperr8 <- function(x) {
 	distinct_df <- dplyr::distinct(x, dataset, model, n, objective, nfreeparams, param_e, param_m, param_a, param_e_lower, param_e_upper, param_m_lower, param_m_upper, param_a_lower, param_a_upper, param_b_lower, param_b_upper, deltaAIC, rep)
 	original <- subset(distinct_df, rep=="Original")
@@ -58,9 +64,16 @@ summary.hyperr8 <- function(x) {
 	return(list(original=original, randomized=randomized, original_best=original_best, randomized_best=randomized_best))
 }
 
+#' Print hyperr8 results
+#' 	
+#' This will summarize the results from hyperr8_run.
+#' @param x The output from hyperr8_run.
+#' @return A data.frame with summary information.
+#' @export
 print.hyperr8 <- function(x) {
 	distinct_df <- dplyr::distinct(x, dataset, model, deltaAIC, n, objective, nfreeparams, param_e, param_m, param_a, param_b, param_e_lower, param_e_upper, param_m_lower, param_m_upper, param_a_lower, param_a_upper, param_b_lower, param_b_upper, rep)
 	original <- subset(distinct_df, rep=="Original")
+	original <- original[order(original$deltaAIC),]
 	return(as.data.frame(original))
 }
 
