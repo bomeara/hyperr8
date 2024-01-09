@@ -4,7 +4,7 @@
 \alias{hyperr8_run}
 \title{Run all analyses}
 \usage{
-hyperr8_run(all_data, nreps = 5, epsilon_lower = 0)
+hyperr8_run(all_data, nreps = 5, epsilon_lower = -Inf)
 }
 \arguments{
 \item{all_data}{A data frame with columns of time, rate, and perhaps citation, numerator, denominator, and/or total_time (other columns will be ignored).}

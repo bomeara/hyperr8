@@ -7,7 +7,7 @@
 optimization_over_all_data(
   all_data,
   models = generate_all_models(),
-  epsilon_lower = 0
+  epsilon_lower = -Inf
 )
 }
 \arguments{
