@@ -38,6 +38,7 @@ get_best_empirical <- function(run_output) {
 #' @return A ggplot2 object.
 #' @export
 plot.hyperr8 <- function(x, loglog=TRUE, ...) {
+	x <- x |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
 	npoints <- nrow(subset(x, rate_type=='empirical_rate' & deltaAIC==0))
 	#alpha <- max(0.005, min(0.7, 10/sqrt(npoints)))
 	alpha <- 0.1
@@ -453,15 +454,16 @@ summarize_all_fitted_models <- function(minimization_approach_result) {
 			total_time=focal_result$total_time, 
 			denominator=focal_result$denominator
 		))
-		focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
+	#	focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
 		
-		focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component", "linear_component", "constant_component"), names_to="component_type", values_to="component")
-		focal_df_tall$component_type <- gsub("_component", "", focal_df_tall$component_type)
+	#	focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component", "linear_component", "constant_component"), names_to="component_type", values_to="component")
+	#	focal_df_tall$component_type <- gsub("_component", "", focal_df_tall$component_type)
 		
-		focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component_proportion", "linear_component_proportion", "constant_component_proportion"), names_to="component_proportion_type", values_to="component_proportion")
+	#	focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component_proportion", "linear_component_proportion", "constant_component_proportion"), names_to="component_proportion_type", values_to="component_proportion")
+	#	focal_df_tall$component_proportion_type <- gsub("_component_proportion", "", focal_df_tall$component_proportion_type)
 
-		#focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("predicted_nonlog_rate", "empirical_nonlog_rate", "predicted_nonlog_rate_no_mserr", "error_only_nonlog_rate"), names_to="rate_type", values_to="nonlog_rate")
-		results <- rbind(results, focal_df_tall)
+	#	results <- rbind(results, focal_df_tall)
+		results <- rbind(results, focal_df)
 	}
 	results$deltaAIC <- NA
 	for (focal_dataset in unique(results$dataset)) {
@@ -477,6 +479,37 @@ summarize_all_models <- function(minimization_approach_result_summarized) {
 	return(models)
 }
 
+#' Plot contributions of each component
+#' 
+#' This will plot the contributions of each component.
+#' @param x The output from summarize_all_fitted_models, filtered to a single dataset and model
+#' @param scaling_factor The scaling factor for the plot, which will be used to determine the height of the ribbons.
+#' @return A ggplot2 object.
+#' @export
+plot_proportion_with_offset <- function(x, scaling_factor=0.3) {
+	x <- x |> tidyr::pivot_wider(names_from="component_proportion_type", values_from="component_proportion")
+	x <- subset(x, rate_type=="predicted_rate")
+	starting_values <- log(x$rate)-0.5*scaling_factor
+	x$constant_component_proportion_ribbon_lower <- starting_values
+	x$constant_component_proportion_ribbon_upper <- x$constant_component_proportion_ribbon_lower+scaling_factor*(x$constant)
+	x$linear_component_proportion_ribbon_lower <- x$constant_component_proportion_ribbon_upper
+	x$linear_component_proportion_ribbon_upper <- x$linear_component_proportion_ribbon_lower + scaling_factor*(x$linear)
+	x$hyperbolic_component_proportion_ribbon_lower <- x$linear_component_proportion_ribbon_upper 
+	x$hyperbolic_component_proportion_ribbon_upper <- x$hyperbolic_component_proportion_ribbon_lower + scaling_factor*(x$hyperbolic)
+	
+	x <- dplyr::distinct(x, dataset, time, rate, rate_type, constant_component_proportion_ribbon_lower, constant_component_proportion_ribbon_upper, linear_component_proportion_ribbon_lower, linear_component_proportion_ribbon_upper, hyperbolic_component_proportion_ribbon_lower, hyperbolic_component_proportion_ribbon_upper)
+	
+	# now do geom_ribbon
+	gcool <- ggplot(x, aes(x=time, y=rate)) + 
+		geom_ribbon(aes(ymin=constant_component_proportion_ribbon_lower, ymax=constant_component_proportion_ribbon_upper), fill="red") + 
+		geom_ribbon(aes(ymin=linear_component_proportion_ribbon_lower, ymax=linear_component_proportion_ribbon_upper), fill="blue") + 
+		geom_ribbon(aes(ymin=hyperbolic_component_proportion_ribbon_lower, ymax=hyperbolic_component_proportion_ribbon_upper), fill="green") 
+		#gcool <- gcool + geom_line(aes(y=log(rate)),colour="black") 
+		gcool <- gcool + scale_x_continuous(trans="log")
+		gcool <- gcool + scale_y_continuous(labels=function(y) exp(y))
+	
+	return(gcool)
+}
 
 optimization_and_summarization_over_randomized_data <- function(all_data, nreps=5, epsilon_lower=-Inf) {
 	final_result <- data.frame()
