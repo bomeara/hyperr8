@@ -269,8 +269,8 @@ optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstar
 	}
 	result$dentist_result <- dentist_result
 	result$nfreeparams <- nfreeparams
-	print(paste0("model_distance_calls: ", model_distance_calls))
-	print(paste0("model_distance_not_finite: ", model_distance_not_finite))
+	#(paste0("model_distance_calls: ", model_distance_calls))
+	#print(paste0("model_distance_not_finite: ", model_distance_not_finite))
 	return(result)
 }
 
@@ -348,8 +348,8 @@ optimization_over_all_data <- function(all_data, models=generate_all_models(), e
 				ub[3] <- as.numeric(as.character(models$b[model_index]))
 			}
 			print(paste0("Optimizing model ", model_index, " of ", nrow(models), " ", models$description[model_index],  " for dataset ", dataset))
-			print(paste0("lb: ", paste0(lb, collapse=", ")))
-			print(paste0("ub: ", paste0(ub, collapse=", ")))
+		#	print(paste0("lb: ", paste0(lb, collapse=", ")))
+		#	print(paste0("ub: ", paste0(ub, collapse=", ")))
 			
 			local_result <- optimize_rate_model(focal_data, function_flexible, lb=lb, ub=ub, log_offset=log_offset)
 			local_result$model <-  models$description[model_index]
