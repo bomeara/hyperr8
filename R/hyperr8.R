@@ -211,7 +211,7 @@ generate_all_models_OLD <- function() {
 	return(param_possibilities)
 }
 
-optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstarts_extra=10, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), log_offset=0) {
+optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstarts_extra=10, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), log_offset=0, nstep_dentist=1000) {
 	model_distance_calls <<- 0
 	model_distance_not_finite <<- 0
 	par=c(rep(.1, 2), mean(focal_data$rate))
@@ -261,7 +261,7 @@ optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstar
 	}
 	
 	names(result$solution) <- c("h", "m", "b")[1:length(result$solution)]
-	dentist_result <- suppressWarnings({dentist::dent_walk(par=result$solution, fn=model_distance, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, log_offset=log_offset)}) # if the likelihood improves during dent_walk, it will return the improved solution
+	dentist_result <- suppressWarnings({dentist::dent_walk(par=result$solution, fn=model_distance, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, log_offset=log_offset, nsteps=nstep_dentist)}) # if the likelihood improves during dent_walk, it will return the improved solution
 	if(min(dentist_result$results$neglnL) < result$objective) {
 		best_row <- which.min(dentist_result$results$neglnL)
 		result$solution <- unname(unlist(dentist_result$results[best_row,-1]))
@@ -269,6 +269,7 @@ optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstar
 	}
 	result$dentist_result <- dentist_result
 	result$nfreeparams <- nfreeparams
+	result$datum_id <- focal_data$datum_id
 	#(paste0("model_distance_calls: ", model_distance_calls))
 	#print(paste0("model_distance_not_finite: ", model_distance_not_finite))
 	return(result)
@@ -282,6 +283,9 @@ optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstar
 clean_input_data <- function(all_data) {
 	if(!"citation" %in% colnames(all_data)) {
 		all_data$citation <- "uncited"
+	}
+	if(!"datum_id" %in% colnames(all_data)) {
+		all_data$datum_id <- sequence(nrow(all_data))
 	}
 	if(!"log_offset" %in% colnames(all_data)) {
 		all_data$log_offset <- 0
@@ -321,9 +325,10 @@ clean_input_data <- function(all_data) {
 #' @param all_data A data frame with columns of time, rate, and citation.
 #' @param models A data frame with columns of e, k, a, and description
 #' @param epsilon_lower The lower bound for the epsilon parameter.
+#' @param nstep_dentist The number of steps for the dentist algorithm.
 #' @return A list of results, one for each model and dataset.
 #' @export
-optimization_over_all_data <- function(all_data, models=generate_all_models(), epsilon_lower=-Inf) {
+optimization_over_all_data <- function(all_data, models=generate_all_models(), epsilon_lower=-Inf, nstep_dentist=1000) {
 	all_data <- clean_input_data(all_data)
 	datasets <- unique(all_data$citation)
 	results <- list()
@@ -351,7 +356,7 @@ optimization_over_all_data <- function(all_data, models=generate_all_models(), e
 		#	print(paste0("lb: ", paste0(lb, collapse=", ")))
 		#	print(paste0("ub: ", paste0(ub, collapse=", ")))
 			
-			local_result <- optimize_rate_model(focal_data, function_flexible, lb=lb, ub=ub, log_offset=log_offset)
+			local_result <- optimize_rate_model(focal_data, function_flexible, lb=lb, ub=ub, log_offset=log_offset, nstep_dentist=nstep_dentist)
 			local_result$model <-  models$description[model_index]
 			local_result$description <- models$description[model_index]
 			local_result <- summarize_model(local_result, focal_data, function_flexible, log_offset=log_offset)
@@ -452,7 +457,8 @@ summarize_all_fitted_models <- function(minimization_approach_result) {
 			constant_component_proportion=focal_result$constant_component_proportion,
 			numerator=focal_result$numerator, 
 			total_time=focal_result$total_time, 
-			denominator=focal_result$denominator
+			denominator=focal_result$denominator,
+			datum_id=focal_result$datum_id
 		))
 	#	focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
 		

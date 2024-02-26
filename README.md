@@ -4,6 +4,8 @@
 # hyperr8
 
 <!-- badges: start -->
+
+[![R-CMD-check](https://github.com/bomeara/hyperr8/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bomeara/hyperr8/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 The goal of hyperr8 is to properly handle datasets that have a rate
@@ -27,13 +29,13 @@ This is a basic example which shows you how to solve a common problem:
 library(hyperr8)
 car_rates <- generate_car_simulation()
 head(car_rates)
-#>   distance     time     rate       dataset
-#> 1 206.9500 2.368772 87.36596 simulated car
-#> 2 221.3413 3.661825 60.44562 simulated car
-#> 3 208.6496 2.965327 70.36310 simulated car
-#> 4 212.2328 3.012719 70.44559 simulated car
-#> 5 214.2982 3.185374 67.27568 simulated car
-#> 6 209.1510 3.231822 64.71612 simulated car
+#>   distance     time     rate      citation
+#> 1 210.2970 3.363070 62.53124 simulated_car
+#> 2 214.3011 3.175702 67.48150 simulated_car
+#> 3 218.7563 2.978665 73.44106 simulated_car
+#> 4 202.7017 2.220715 91.27771 simulated_car
+#> 5 204.1232 2.605153 78.35364 simulated_car
+#> 6 209.4557 2.556441 81.93255 simulated_car
 ```
 
 This generates a dataset with 1,000 cars with an average speed of 70 mph

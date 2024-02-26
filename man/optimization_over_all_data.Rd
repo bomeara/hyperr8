@@ -7,7 +7,8 @@
 optimization_over_all_data(
   all_data,
   models = generate_all_models(),
-  epsilon_lower = -Inf
+  epsilon_lower = -Inf,
+  nstep_dentist = 1000
 )
 }
 \arguments{
@@ -16,6 +17,8 @@ optimization_over_all_data(
 \item{models}{A data frame with columns of e, k, a, and description}
 
 \item{epsilon_lower}{The lower bound for the epsilon parameter.}
+
+\item{nstep_dentist}{The number of steps for the dentist algorithm.}
 }
 \value{
 A list of results, one for each model and dataset.
