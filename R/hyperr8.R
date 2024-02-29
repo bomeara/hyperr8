@@ -12,6 +12,7 @@
 #' library(hyperr8)
 #' car_data <- generate_car_simulation()
 #' all_run <- hyperr8_run(car_data)
+#' library(ggplot2)
 #' plot(all_run)
 hyperr8_run <- function(all_data, nreps=5, epsilon_lower=-Inf) {
 	all_data <- clean_input_data(all_data)
@@ -43,7 +44,7 @@ plot.hyperr8 <- function(x, loglog=TRUE, ...) {
 	#alpha <- max(0.005, min(0.7, 10/sqrt(npoints)))
 	alpha <- 0.1
 	x$data_rep <- paste0(x$dataset, "\n", x$rep)
-	gcool <- ggplot(subset(x, rate_type=='empirical_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=alpha, shape=20) + facet_wrap(~datarep, scales="free") + theme_bw() + xlab("Time") + ylab("Rate")
+	gcool <- ggplot(subset(x, rate_type=='empirical_rate' & deltaAIC==0), aes(x=time, y=rate)) + geom_point(alpha=alpha, shape=20) + facet_wrap(~data_rep, scales="free") + theme_bw() + xlab("Time") + ylab("Rate")
 	if(loglog) {
 		gcool <- gcool + scale_x_continuous(trans = "log") + scale_y_continuous(trans = "log")
 	}
@@ -55,11 +56,12 @@ plot.hyperr8 <- function(x, loglog=TRUE, ...) {
 #' Summarize hyperr8 results
 #' 
 #' This will summarize the results from hyperr8_run.
-#' @param x The output from hyperr8_run.
+#' @param object The output from hyperr8_run.
+#' @param ... Other arguments to pass to the summary function.
 #' @return A list with summary information.
 #' @export
-summary.hyperr8 <- function(x) {
-	distinct_df <- dplyr::distinct(x, dataset, model, n, objective, nfreeparams, param_h, param_m, param_b, param_h_lower, param_h_upper, param_m_lower, param_m_upper, param_b_lower, param_b_upper, deltaAIC, rep)
+summary.hyperr8 <- function(object, ...) {
+	distinct_df <- dplyr::distinct(object, dataset, model, n, objective, nfreeparams, param_h, param_m, param_b, param_h_lower, param_h_upper, param_m_lower, param_m_upper, param_b_lower, param_b_upper, deltaAIC, rep)
 	original <- subset(distinct_df, rep=="Original")
 	randomized <- subset(distinct_df, rep!="Original")
 	original_best <- subset(original, deltaAIC==0)
@@ -71,9 +73,10 @@ summary.hyperr8 <- function(x) {
 #' 	
 #' This will summarize the results from hyperr8_run.
 #' @param x The output from hyperr8_run.
+#' @param ... Other arguments to pass to the printing function.
 #' @return A data.frame with summary information.
 #' @export
-print.hyperr8 <- function(x) {
+print.hyperr8 <- function(x,...) {
 	distinct_df <- dplyr::distinct(x, dataset, model, n, objective, nfreeparams, param_h, param_m, param_b, param_h_lower, param_h_upper, param_m_lower, param_m_upper, param_b_lower, param_b_upper, deltaAIC, rep)
 	original <- subset(distinct_df, rep=="Original")
 	original <- original[order(original$deltaAIC),]
@@ -506,7 +509,7 @@ plot_proportion_with_offset <- function(x, scaling_factor=0.3) {
 	x <- dplyr::distinct(x, dataset, time, rate, rate_type, constant_component_proportion_ribbon_lower, constant_component_proportion_ribbon_upper, linear_component_proportion_ribbon_lower, linear_component_proportion_ribbon_upper, hyperbolic_component_proportion_ribbon_lower, hyperbolic_component_proportion_ribbon_upper)
 	
 	# now do geom_ribbon
-	gcool <- ggplot(x, aes(x=time, y=rate)) + 
+	gcool <- ggplot2::ggplot(x, aes(x=time, y=rate)) + 
 		geom_ribbon(aes(ymin=constant_component_proportion_ribbon_lower, ymax=constant_component_proportion_ribbon_upper), fill="red") + 
 		geom_ribbon(aes(ymin=linear_component_proportion_ribbon_lower, ymax=linear_component_proportion_ribbon_upper), fill="blue") + 
 		geom_ribbon(aes(ymin=hyperbolic_component_proportion_ribbon_lower, ymax=hyperbolic_component_proportion_ribbon_upper), fill="green") 
@@ -553,3 +556,14 @@ randomize_within_dataset <- function(all_data) {
 	}
 	return(result)
 }
+
+#' This is data to be included in my package
+#'
+#' @name yule_sim
+#' @docType data
+#' @keywords data
+#' @usage data(yule_sim)
+#' @format a data.frame with 25,000 rows and 8 columns
+#' 
+#' This has a dataset of estimated speciation rate for every tree simulated from a pure birth simulation with a speciation rate 0.1 and total time pulled from a distribution uniform on a log space ranging from 1 to 50 time units. Trees started with two taxa; trees with no speciation events ended with two taxa, having an inferred speciation rate of 0.
+NULL

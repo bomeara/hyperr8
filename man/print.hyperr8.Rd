@@ -6,10 +6,12 @@
 
 This will summarize the results from hyperr8_run.}
 \usage{
-\method{print}{hyperr8}(x)
+\method{print}{hyperr8}(x, ...)
 }
 \arguments{
 \item{x}{The output from hyperr8_run.}
+
+\item{...}{Other arguments to pass to the printing function.}
 }
 \value{
 A data.frame with summary information.

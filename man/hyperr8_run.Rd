@@ -26,5 +26,6 @@ Data can be randomized to help suggest whether an observed pattern is spurious.
 library(hyperr8)
 car_data <- generate_car_simulation()
 all_run <- hyperr8_run(car_data)
+library(ggplot2)
 plot(all_run)
 }

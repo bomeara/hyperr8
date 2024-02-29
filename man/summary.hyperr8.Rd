@@ -4,10 +4,12 @@
 \alias{summary.hyperr8}
 \title{Summarize hyperr8 results}
 \usage{
-\method{summary}{hyperr8}(x)
+\method{summary}{hyperr8}(object, ...)
 }
 \arguments{
-\item{x}{The output from hyperr8_run.}
+\item{object}{The output from hyperr8_run.}
+
+\item{...}{Other arguments to pass to the summary function.}
 }
 \value{
 A list with summary information.
