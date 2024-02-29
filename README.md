@@ -3,10 +3,6 @@
 
 # hyperr8
 
-<!-- badges: start -->
-
-[![R-CMD-check](https://github.com/bomeara/hyperr8/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bomeara/hyperr8/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
 
 The goal of hyperr8 is to properly handle datasets that have a rate
 versus a time.
