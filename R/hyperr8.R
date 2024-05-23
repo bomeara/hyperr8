@@ -61,6 +61,7 @@ plot.hyperr8 <- function(x, loglog=TRUE, ...) {
 #' @return A list with summary information.
 #' @export
 summary.hyperr8 <- function(object, ...) {
+	class(object) <- 'data.frame'
 	distinct_df <- dplyr::distinct(object, dataset, model, n, objective, nfreeparams, param_h, param_m, param_b, param_h_lower, param_h_upper, param_m_lower, param_m_upper, param_b_lower, param_b_upper, deltaAIC, rep)
 	original <- subset(distinct_df, rep=="Original")
 	randomized <- subset(distinct_df, rep!="Original")
