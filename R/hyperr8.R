@@ -165,17 +165,19 @@ generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, 
 # rate = e/t + m*t^a + b
 
 # This returns the log rate.
-function_flexible <- function(par, focal_data, log_offset=0) {
+function_flexible <- function(par, focal_data, log_offset=0, do_log=TRUE) {
 	h <- par[1]
 	m <- par[2]
 	b <- par[3]
 	time <- focal_data$time
-	return(log(
-		log_offset +
+	result <- log_offset +
 		h/time +
 		m*time +
 		b
-	))
+	if(do_log) {
+		result <- log(result)
+	}
+	return(result)
 }
 
 # rate = e/t + m*t^a + b
@@ -398,11 +400,12 @@ summarize_model <- function(local_result, focal_data, function_name, log_offset)
 	local_result$constant_component_proportion <- abs(local_result$constant_component)/(abs(local_result$hyperbolic_component) + abs(local_result$linear_component) + abs(local_result$constant_component))
 	
 	
-	local_result$predicted_log_rate_with_offset_no_mserr <- rep(NA, length(local_result$empirical_log_rate))
-	try({ local_result$predicted_log_rate_with_offset_no_mserr <- function_name(solution_nomserr, focal_data, log_offset=log_offset)})
+	local_result$predicted_log_rate_with_offset_no_mserr <- NA
+	local_result$predicted_rate_with_offset_no_mserr <- NA
 	local_result$predicted_rate_no_mserr <- NA
-	try({ local_result$predicted_rate_no_mserr <- exp(local_result$predicted_log_rate_with_offset_no_mserr) - log_offset})
-	local_result$error_only_log_rate_with_offset <- local_result$predicted_log_rate_with_offset - local_result$predicted_log_rate_with_offset_no_mserr
+
+	try({ local_result$predicted_rate_with_offset_no_mserr <- function_name(solution_nomserr, focal_data, log_offset=log_offset, do_log=FALSE)})
+	try({ local_result$predicted_rate_no_mserr <- local_result$predicted_rate_with_offset_no_mserr - log_offset})
 	parameters_no_epsilon <- local_result$par
 	#parameters_no_epsilon[1] <- 0
 	#local_result$predicted_log_rate_no_mserr <- function_name(parameters_no_epsilon, df)
@@ -448,7 +451,6 @@ summarize_all_fitted_models <- function(minimization_approach_result) {
 			empirical_log_rate=focal_result$empirical_log_rate, 
 			empirical_log_rate_with_offset=focal_result$empirical_log_rate_with_offset,
 			predicted_log_rate_with_offset_no_mserr=focal_result$predicted_log_rate_with_offset_no_mserr, 
-			error_only_log_rate_with_offset=focal_result$error_only_log_rate_with_offset, 
 			predicted_rate=focal_result$predicted_rate,
 			empirical_rate=focal_result$empirical_rate,
 			predicted_rate_no_mserr=focal_result$predicted_rate_no_mserr,
