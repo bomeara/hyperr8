@@ -3,7 +3,7 @@
 \docType{data}
 \name{yule_sim}
 \alias{yule_sim}
-\title{This is data to be included in my package}
+\title{This is data to be included in the package}
 \format{
 a data.frame with 25,000 rows and 8 columns
 
@@ -13,6 +13,6 @@ This has a dataset of estimated speciation rate for every tree simulated from a 
 data(yule_sim)
 }
 \description{
-This is data to be included in my package
+This is data to be included in the package
 }
 \keyword{data}

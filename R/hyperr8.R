@@ -18,11 +18,15 @@ hyperr8_run <- function(all_data, nreps=5, epsilon_lower=-Inf) {
 	all_data <- clean_input_data(all_data)
 	original <- summarize_all_fitted_models(optimization_over_all_data(all_data, epsilon_lower=epsilon_lower))
 	original$rep <- "Original"
-	randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower)
-	randomized$rep <- paste0("Rep ", randomized$rep)
-	merged <- dplyr::bind_rows(original, randomized)
+	if(nreps>0) {
+		randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower)
+		randomized$rep <- paste0("Rep ", randomized$rep)
+		merged <- dplyr::bind_rows(original, randomized)
+	} else {
+		merged <- original
+	}
+	merged <- as.data.frame(merged) # I am a Klingon with bad spelling. Death to tibbles. They have no honor.
 	class(merged) <- c("hyperr8", class(merged))
-	#merged <- as.data.frame(merged) # I am a Klingon with bad spelling. Death to tibbles. They have no honor.
 	return(merged)
 }
 
@@ -64,10 +68,15 @@ summary.hyperr8 <- function(object, ...) {
 	class(object) <- 'data.frame'
 	distinct_df <- dplyr::distinct(object, dataset, model, n, objective, nfreeparams, param_h, param_m, param_b, param_h_lower, param_h_upper, param_m_lower, param_m_upper, param_b_lower, param_b_upper, deltaAIC, rep)
 	original <- subset(distinct_df, rep=="Original")
-	randomized <- subset(distinct_df, rep!="Original")
 	original_best <- subset(original, deltaAIC==0)
-	randomized_best <- subset(randomized, deltaAIC==0)
-	return(list(original=original, randomized=randomized, original_best=original_best, randomized_best=randomized_best))
+	return_list <- list(original=original, original_best=original_best)
+	randomized <- subset(distinct_df, rep!="Original")
+	if(nrow(randomized)>0) {
+		randomized_best <- subset(randomized, deltaAIC==0)
+		return_list$randomized <- randomized
+		return_list$randomized_best <- randomized_best
+	}
+	return(return_list)
 }
 
 #' Print hyperr8 results
@@ -257,7 +266,7 @@ optimize_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstar
 		par3 <- result$solution
 		widths <- ub-lb
 		sd_vector <- apply(rbind(widths, rep(0.1, length(widths))), 2, min)
-		par3 <- rnorm(length(result$solution), mean=result$solution, sd=sd_vector)
+		par3 <- stats::rnorm(length(result$solution), mean=result$solution, sd=sd_vector)
 		par3[par3<lb] <- lb[par3<lb]
 		par3[par3>ub] <- ub[par3>ub]
 		result3 <- nloptr::nloptr(x0=par3, eval_f=model_distance,  lb=lb, ub=ub, opts=list(algorithm=all_algorithms[1 + start_index%%length(all_algorithms)], xtol_rel = 1e-4), focal_data=focal_data, log_offset=log_offset)
@@ -560,7 +569,7 @@ randomize_within_dataset <- function(all_data) {
 	return(result)
 }
 
-#' This is data to be included in my package
+#' This is data to be included in the package
 #'
 #' @name yule_sim
 #' @docType data

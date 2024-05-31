@@ -1,6 +1,6 @@
 Package: hyperr8
 Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Version: 0.1.1
 Authors@R: c(
     person("Brian", "O'Meara", , "omeara.brian@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-0337-5997")),
