@@ -6,6 +6,7 @@
 #' @param all_data A data frame with columns of time, rate, and perhaps citation, numerator, denominator, and/or total_time (other columns will be ignored).
 #' @param nreps The number of times to randomize the data within each dataset.
 #' @param epsilon_lower The lower bound for the epsilon parameter.
+#' @param nstep_dentist The number of steps for the dentist algorithm.
 #' @return A data.frame of results with class hyperr8.
 #' @export
 #' @examples
@@ -14,12 +15,12 @@
 #' all_run <- hyperr8_run(car_data)
 #' library(ggplot2)
 #' plot(all_run)
-hyperr8_run <- function(all_data, nreps=5, epsilon_lower=-Inf) {
+hyperr8_run <- function(all_data, nreps=5, epsilon_lower=-Inf, nstep_dentist=1000) {
 	all_data <- clean_input_data(all_data)
-	original <- summarize_all_fitted_models(optimization_over_all_data(all_data, epsilon_lower=epsilon_lower))
+	original <- summarize_all_fitted_models(optimization_over_all_data(all_data, epsilon_lower=epsilon_lower, nstep_dentist=nstep_dentist))
 	original$rep <- "Original"
 	if(nreps>0) {
-		randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower)
+		randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower, nstep_dentist=nstep_dentist)
 		randomized$rep <- paste0("Rep ", randomized$rep)
 		merged <- dplyr::bind_rows(original, randomized)
 	} else {
@@ -174,7 +175,7 @@ generate_car_simulation <- function(mean_driving_time=3, mean_driving_speed=70, 
 # rate = e/t + m*t^a + b
 
 # This returns the log rate.
-function_flexible <- function(par, focal_data, log_offset=0, do_log=TRUE) {
+function_flexible <- function(par, focal_data, log_offset=0, do_log=TRUE, do_dnorm=FALSE) {
 	h <- par[1]
 	m <- par[2]
 	b <- par[3]
@@ -183,6 +184,13 @@ function_flexible <- function(par, focal_data, log_offset=0, do_log=TRUE) {
 		h/time +
 		m*time +
 		b
+	if(do_dnorm) {
+		result <- log_offset + 
+			(h*sqrt(2/pi) + # folded normal
+			m*time^2 +
+			b*time) / time
+			
+	}
 	if(do_log) {
 		result <- log(result)
 	}
@@ -385,7 +393,7 @@ optimization_over_all_data <- function(all_data, models=generate_all_models(), e
 
 
 
-summarize_model <- function(local_result, focal_data, function_name, log_offset) {
+summarize_model <- function(local_result, focal_data, function_name, log_offset, do_dnorm=FALSE) {
 	local_result$n <- nrow(focal_data)
 	local_result$AIC <- 2*local_result$objective + 2*local_result$nfreeparams
 	local_result$numerator <- focal_data$numerator
@@ -395,7 +403,7 @@ summarize_model <- function(local_result, focal_data, function_name, log_offset)
 	solution <- local_result$solution
 	solution_nomserr <- solution
 	solution_nomserr[1] <- 0
-	local_result$predicted_log_rate_with_offset <- function_name(local_result$solution, focal_data, log_offset=log_offset)
+	local_result$predicted_log_rate_with_offset <- function_name(local_result$solution, focal_data, log_offset=log_offset, do_dnorm=do_dnorm)
 	local_result$predicted_rate <- exp(local_result$predicted_log_rate_with_offset) - log_offset
 	local_result$empirical_log_rate <- focal_data$log_rate
 	local_result$empirical_log_rate_with_offset <- log(focal_data$rate + log_offset)
@@ -532,10 +540,10 @@ plot_proportion_with_offset <- function(x, scaling_factor=0.3) {
 	return(gcool)
 }
 
-optimization_and_summarization_over_randomized_data <- function(all_data, nreps=5, epsilon_lower=-Inf) {
+optimization_and_summarization_over_randomized_data <- function(all_data, nreps=5, epsilon_lower=-Inf, nstep_dentist=1000) {
 	final_result <- data.frame()
 	for(rep_index in sequence(nreps)) {
-		local_result <- summarize_all_fitted_models(optimization_over_all_data(randomize_within_dataset(all_data), epsilon_lower=epsilon_lower))
+		local_result <- summarize_all_fitted_models(optimization_over_all_data(randomize_within_dataset(all_data), epsilon_lower=epsilon_lower, nstep_dentist=nstep_dentist))
 		local_result$rep <- rep_index
 		final_result <- rbind(final_result, local_result)	
 	}
@@ -568,6 +576,228 @@ randomize_within_dataset <- function(all_data) {
 	}
 	return(result)
 }
+
+#' Run all analyses using norm appoach
+#' 
+#' By default will run analyses on all datasets. It expects an input data frame with columns of time and rate, each row representing a single observation. To handle multiple datasets at once, have a citation column indicating the name for the dataset (which could be a full citation or as simple as "dataset1", "dataset2", etc.). You can also include a column for numerator (the number of events) and denominator (the number of opportunities for events). If you have a column for total_time, it will use that for randomization rather than time (this is important for things like phylogenetic trees, where the time over which events happen is not just the overall age of the tree but the sum of its branch lengths). 
+#' 
+#' Data can be randomized to help suggest whether an observed pattern is spurious. 
+#' @param all_data A data frame with columns of time, rate, and perhaps citation, numerator, denominator, and/or total_time (other columns will be ignored).
+#' @param nreps The number of times to randomize the data within each dataset.
+#' @param epsilon_lower The lower bound for the epsilon parameter.
+#' @param nstep_dentist The number of steps for the dentist algorithm.
+#' @return A data.frame of results with class hyperr8.
+#' @export
+#' @examples
+#' library(hyperr8); car_data <- generate_car_simulation(); all_run <- hyperr8_norm_run(car_data)
+#' subset(as.data.frame(all_run), datum_id==1)
+#' library(ggplot2)
+#' plot(all_run)
+hyperr8_norm_run <- function(all_data, nreps=5, epsilon_lower=-Inf, nstep_dentist=1000) {
+	all_data <- clean_input_data(all_data)
+	original <- summarize_all_fitted_models_norm_approach(optimization_norm_over_all_data(all_data, epsilon_lower=epsilon_lower, nstep_dentist=nstep_dentist))
+	original$rep <- "Original"
+	# if(nreps>0) {
+	# 	randomized <- optimization_and_summarization_over_randomized_data(all_data, nreps=nreps, epsilon_lower=epsilon_lower, nstep_dentist=nstep_dentist)
+	# 	randomized$rep <- paste0("Rep ", randomized$rep)
+	# 	merged <- dplyr::bind_rows(original, randomized)
+	# } else {
+		merged <- original
+	# }
+	merged <- as.data.frame(merged) # I am a Klingon with bad spelling. Death to tibbles. They have no honor.
+	class(merged) <- c("hyperr8", class(merged))
+	return(merged)
+}
+
+#' Optimize rate model using noise model
+#' 
+#' This will dredge all the rate models for a given dataset. It expects column names of time, rate, and citation; optionally, it can also include a numerator, denominator, and/or total_time columns. It will return a list of results, one for each model and dataset.
+#' 
+#' By default it will use all models, but you can specify a subset of models to use.
+#' @param all_data A data frame with columns of time, rate, and citation.
+#' @param models A data frame with columns of e, k, a, and description
+#' @param epsilon_lower The lower bound for the epsilon parameter.
+#' @param nstep_dentist The number of steps for the dentist algorithm.
+#' @return A list of results, one for each model and dataset.
+#' @export
+optimization_norm_over_all_data <- function(all_data, models=generate_all_models()[c(3,5,7),], epsilon_lower=-Inf, nstep_dentist=1000) {
+	all_data <- clean_input_data(all_data)
+	datasets <- unique(all_data$citation)
+	results <- list()
+	for(dataset in datasets) {
+		focal_data <- subset(all_data, citation==dataset)
+		log_offset <- focal_data$log_offset[1]
+		focal_data$log_rate_with_offset <- log(focal_data$rate + log_offset)
+		
+		for(model_index in sequence(nrow(models))) {
+			lb <- c(epsilon_lower, rep(-Inf, 2))
+			ub <- rep(Inf, 3)
+			if(models$h[model_index]!="h") {
+				lb[1] <- as.numeric(as.character(models$h[model_index]))
+				ub[1] <- as.numeric(as.character(models$h[model_index]))
+			}
+			if(models$m[model_index]!="m") {
+				lb[2] <- as.numeric(as.character(models$m[model_index]))
+				ub[2] <- as.numeric(as.character(models$m[model_index]))
+			}
+			if(models$b[model_index]!="b") {
+				lb[3] <- as.numeric(as.character(models$b[model_index]))
+				ub[3] <- as.numeric(as.character(models$b[model_index]))
+			}
+			print(paste0("Optimizing model ", model_index, " of ", nrow(models), " ", models$description[model_index],  " for dataset ", dataset))
+		#	print(paste0("lb: ", paste0(lb, collapse=", ")))
+		#	print(paste0("ub: ", paste0(ub, collapse=", ")))
+			
+			local_result <- optimize_norm_rate_model(focal_data, function_flexible, lb=lb, ub=ub, log_offset=log_offset, nstep_dentist=nstep_dentist)
+			local_result$model <-  models$description[model_index]
+			local_result$description <- models$description[model_index]
+			local_result <- summarize_model(local_result, focal_data, function_flexible, log_offset=log_offset, do_dnorm=TRUE)
+			results[[length(results)+1]] <- local_result
+			names(results)[length(results)] <- paste0(dataset, "__", local_result$model)	
+			print(local_result)
+
+		}
+	}	
+	return(results)
+}
+
+
+
+optimize_norm_rate_model<- function(focal_data, function_name, lb=-Inf, ub=Inf, nstarts_extra=5, all_algorithms=c("NLOPT_LN_BOBYQA", "NLOPT_LN_SBPLX", "NLOPT_LN_NEWUOA_BOUND"), log_offset=0, nstep_dentist=1000) {
+	model_distance_calls <<- 0
+	model_distance_not_finite <<- 0
+	par=c(100, 0.2, max(0.001,min(focal_data$rate)))
+	if(any(is.finite(ub))) {
+		par[is.finite(ub)] <- ub[is.finite(ub)]
+	}
+	nfreeparams <- sum(!is.finite(ub))
+	
+
+	likelihood_function <- function(par, focal_data) {
+		par_no_h <- par
+		par_no_h[1] <- 0
+		means <- function_name(par_no_h, focal_data, 0, do_log=FALSE)
+		negLnL <- -1 * sum(stats::dnorm(focal_data$rate*focal_data$time, mean=means*focal_data$time, sd=par[1], log=TRUE))
+		return(negLnL)
+	}
+	
+	#return(optim(par=par, fn=model_distance, df=df, lower=lb, upper=ub, method="L-BFGS-B"))
+	result <- nloptr::nloptr(x0=par, eval_f=likelihood_function,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data)
+	
+	
+	if(1==1) {
+	# starting with lower param values, since they're often small
+		# par2 <- c(result$solution*runif(length(result$solution), 0.9, 2))
+		# if(any(is.finite(ub))) {
+		# 	par2[is.finite(ub)] <- ub[is.finite(ub)]
+		# }
+		
+		# result2 <- nloptr::nloptr(x0=par2, eval_f=likelihood_function,  lb=lb, ub=ub, opts=list(algorithm="NLOPT_LN_SBPLX", xtol_rel = 1e-4), focal_data=focal_data)
+		
+		# if(result2$objective < result$objective) {
+		# 	result <- result2
+		# }
+		
+		for(start_index in sequence(nstarts_extra)) {
+			par3 <- c(result$solution*runif(length(result$solution), 0.9, 2))
+			widths <- ub-lb
+			print(paste(start_index, " ", all_algorithms[1 + start_index%%length(all_algorithms)]))
+
+			#sd_vector <- apply(rbind(widths, rep(0.1, length(widths))), 2, min)
+			#par3 <- stats::rnorm(length(result$solution), mean=result$solution, sd=sd_vector)
+			par3[par3<lb] <- lb[par3<lb]
+			par3[par3>ub] <- ub[par3>ub]
+			result3 <- nloptr::nloptr(x0=par3, eval_f=likelihood_function,  lb=lb, ub=ub, opts=list(algorithm=all_algorithms[1 + start_index%%length(all_algorithms)], xtol_rel = 1e-4, maxtime=120, maxeval=100), focal_data=focal_data)
+			if(result3$objective < result$objective) {
+				result <- result3
+			}	
+			
+			print(result3$objective)
+
+		}
+	}
+	
+	names(result$solution) <- c("h", "m", "b")[1:length(result$solution)]
+	#dentist_result <- suppressWarnings({dentist::dent_walk(par=result$solution, fn=likelihood_function, best_neglnL=result$objective, lower_bound=lb, upper_bound=ub, print_freq=1e6, focal_data=focal_data, nsteps=nstep_dentist)}) # if the likelihood improves during dent_walk, it will return the improved solution
+	# if(min(dentist_result$results$neglnL) < result$objective) {
+	# 	best_row <- which.min(dentist_result$results$neglnL)
+	# 	result$solution <- unname(unlist(dentist_result$results[best_row,-1]))
+	# 	result$objective <-  unname(unlist(dentist_result$results[best_row,1]))
+	# }
+	# result$dentist_result <- dentist_result
+	result$nfreeparams <- nfreeparams
+	result$datum_id <- focal_data$datum_id
+	#(paste0("model_distance_calls: ", model_distance_calls))
+	#print(paste0("model_distance_not_finite: ", model_distance_not_finite))
+	return(result)
+}
+
+
+#' Generate summary information for all fitted models
+#' 
+#' This will generate a data frame with summary information for all fitted models.
+#' @param minimization_approach_result A list of results from optimization_over_all_data
+#' @return A data frame with summary information for all fitted models.
+#' @export
+summarize_all_fitted_models_norm_approach <- function(minimization_approach_result) {
+	results <- data.frame()
+	for (focal_model in names(minimization_approach_result)) {
+		data_name <- strsplit(focal_model, "__")[[1]][1]
+		focal_result <- minimization_approach_result[[focal_model]]
+		params <- rep(NA,3)
+		#solution <- focal_result$solution
+		solution <- getElement(focal_result, "solution")
+		params[1:length(solution)] <- solution
+		names(params) <- c("h", "m", "b")
+
+		focal_df <- suppressWarnings(data.frame(
+			dataset=data_name, 
+			model=focal_result$model, 
+			n=focal_result$n, 
+			AIC=focal_result$AIC, 
+			objective=focal_result$objective, 
+			nfreeparams=focal_result$nfreeparams, 
+			param_h=params['h'], 
+			param_m=params['m'], 
+			param_b=params['b'],
+			predicted_log_rate_with_offset=focal_result$predicted_log_rate_with_offset, 
+			empirical_log_rate=focal_result$empirical_log_rate, 
+			empirical_log_rate_with_offset=focal_result$empirical_log_rate_with_offset,
+			predicted_log_rate_with_offset_no_mserr=focal_result$predicted_log_rate_with_offset_no_mserr, 
+			predicted_rate=focal_result$predicted_rate,
+			empirical_rate=focal_result$empirical_rate,
+			predicted_rate_no_mserr=focal_result$predicted_rate_no_mserr,
+			time=focal_result$time, 
+			hyperbolic_component=focal_result$hyperbolic_component,
+			linear_component=focal_result$linear_component,
+			constant_component=focal_result$constant_component,
+			hyperbolic_component_proportion=focal_result$hyperbolic_component_proportion,
+			linear_component_proportion=focal_result$linear_component_proportion,
+			constant_component_proportion=focal_result$constant_component_proportion,
+			numerator=focal_result$numerator, 
+			total_time=focal_result$total_time, 
+			denominator=focal_result$denominator,
+			datum_id=focal_result$datum_id
+		))
+	#	focal_df_tall <- focal_df |> tidyr::pivot_longer(cols=c("predicted_log_rate_with_offset", "empirical_log_rate_with_offset", "predicted_log_rate_with_offset_no_mserr"), names_to="log_rate_type", values_to="log_rate") |> tidyr::pivot_longer(cols=c("predicted_rate", "empirical_rate", "predicted_rate_no_mserr"), names_to="rate_type", values_to="rate")
+		
+	#	focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component", "linear_component", "constant_component"), names_to="component_type", values_to="component")
+	#	focal_df_tall$component_type <- gsub("_component", "", focal_df_tall$component_type)
+		
+	#	focal_df_tall <- focal_df_tall |> tidyr::pivot_longer(cols=c("hyperbolic_component_proportion", "linear_component_proportion", "constant_component_proportion"), names_to="component_proportion_type", values_to="component_proportion")
+	#	focal_df_tall$component_proportion_type <- gsub("_component_proportion", "", focal_df_tall$component_proportion_type)
+
+	#	results <- rbind(results, focal_df_tall)
+		results <- rbind(results, focal_df)
+	}
+	results$deltaAIC <- NA
+	for (focal_dataset in unique(results$dataset)) {
+		focal_rows <- which(results$dataset==focal_dataset)
+		results$deltaAIC[focal_rows] <- results$AIC[focal_rows] - min(results$AIC[focal_rows])
+	}
+	return(results)	
+}
+
 
 #' This is data to be included in the package
 #'
